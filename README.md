@@ -41,7 +41,7 @@ project/
    Из секции References извлекаются библиографические записи. Если название статьи из корпуса встречается в списке литературы другой статьи, создается направленное ребро `PaperA -> PaperB` с отношением `CITES`.
 
 3. **LLM Relation Graph**
-   Локальная HuggingFace LLM, по умолчанию `Qwen/Qwen2.5-3B-Instruct`, классифицирует отношения только для candidate pairs из embedding graph. Разрешенные отношения: `SIMILAR_TO`, `BASED_ON`, `EXTENDS`, `COMPARES_WITH`, `SAME_TOPIC`, `NO_RELATION`.
+   Локальная HuggingFace LLM, по умолчанию `Qwen/Qwen2.5-1.5B-Instruct`, классифицирует отношения только для candidate pairs из embedding graph. Разрешенные отношения: `SIMILAR_TO`, `BASED_ON`, `EXTENDS`, `COMPARES_WITH`, `SAME_TOPIC`, `NO_RELATION`.
 
 4. **Hybrid Graph**
    Объединяет similarity edges, citation edges и LLM edges в `networkx.MultiDiGraph`. Это позволяет сравнить комбинированный подход с каждым отдельным источником связей.
@@ -57,7 +57,7 @@ project/
 PAPERS_PATH = "data/papers"
 RESULTS_PATH = "data/results"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-LLM_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
+LLM_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 SIMILARITY_THRESHOLD = 0.55
 TOP_K = 5
 USE_LLM = False

@@ -22,7 +22,7 @@ ALLOWED_RELATIONS = {
 }
 
 
-def load_llm(model_name: str = "Qwen/Qwen2.5-3B-Instruct"):
+def load_llm(model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"):
     """Load a local Transformers causal LLM.
 
     In Colab this downloads model weights into the runtime cache and runs
@@ -47,9 +47,6 @@ def load_llm(model_name: str = "Qwen/Qwen2.5-3B-Instruct"):
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     if not torch.cuda.is_available():
         model.to("cpu")
-    for sampling_flag in ("temperature", "top_p", "top_k"):
-        if hasattr(model.generation_config, sampling_flag):
-            setattr(model.generation_config, sampling_flag, None)
     model.eval()
     return model, tokenizer
 
@@ -152,24 +149,24 @@ def classify_relation(
             {"role": "user", "content": prompt},
         ]
         if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template:
-            encoded = tokenizer.apply_chat_template(
+            text = tokenizer.apply_chat_template(
                 messages,
+                tokenize=False,
                 add_generation_prompt=True,
-                return_tensors="pt",
             )
         else:
-            encoded = tokenizer(prompt, return_tensors="pt").input_ids
+            text = prompt
 
-        device = next(llm_model.parameters()).device
-        encoded = encoded.to(device)
+        device = getattr(llm_model, "device", next(llm_model.parameters()).device)
+        inputs = tokenizer(text, return_tensors="pt").to(device)
         with torch.inference_mode():
             output_ids = llm_model.generate(
-                encoded,
+                **inputs,
                 max_new_tokens=320,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        generated_ids = output_ids[0, encoded.shape[-1] :]
+        generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
         response = tokenizer.decode(generated_ids, skip_special_tokens=True)
         result = parse_llm_json_response(response or "")
         result["raw_response"] = (response or "")[:1000]
