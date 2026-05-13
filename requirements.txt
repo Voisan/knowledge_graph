@@ -1,0 +1,12 @@
+pandas
+numpy
+PyMuPDF
+sentence-transformers
+scikit-learn
+networkx
+pyvis
+matplotlib
+transformers
+torch
+accelerate
+tqdm
