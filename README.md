@@ -46,17 +46,16 @@ project/
 4. **Hybrid Graph**
    Объединяет similarity edges, citation edges и LLM edges в `networkx.MultiDiGraph`. Это позволяет сравнить комбинированный подход с каждым отдельным источником связей.
 
-## Запуск на Kaggle
+## Запуск 
 
-1. Создайте Kaggle Dataset с PDF-файлами и подключите его к ноутбуку так, чтобы статьи были доступны в `/kaggle/input/papers`.
-2. Загрузите файлы проекта в Kaggle Notebook или добавьте их в `/kaggle/working`.
-3. Откройте `notebooks/main_pipeline.ipynb`.
-4. При необходимости выполните ячейку установки зависимостей.
-5. Проверьте конфигурацию:
+1. Подберите интересующие Вас статьи.
+2. Откройте `notebooks/main_pipeline.ipynb`.
+3. При необходимости выполните ячейку установки зависимостей.
+4. Проверьте конфигурацию:
 
 ```python
-PAPERS_PATH = "/kaggle/input/papers"
-RESULTS_PATH = "/kaggle/working/results"
+PAPERS_PATH = "data/papers"
+RESULTS_PATH = "data/results"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 LLM_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 SIMILARITY_THRESHOLD = 0.55
@@ -64,7 +63,7 @@ TOP_K = 5
 USE_LLM = False
 ```
 
-По умолчанию `USE_LLM=False`, поэтому проект строит embedding, citation и hybrid graph без загрузки тяжелой LLM. Чтобы включить LLM-классификацию, установите `USE_LLM=True` и используйте Kaggle GPU.
+По умолчанию `USE_LLM=False`, поэтому проект строит embedding, citation и hybrid graph без загрузки тяжелой LLM. Чтобы включить LLM-классификацию, установите `USE_LLM=True`.
 
 ## Метрики
 
@@ -85,13 +84,13 @@ USE_LLM = False
 Сравнительная таблица сохраняется в:
 
 ```text
-/kaggle/working/results/graph_metrics_comparison.csv
+results/graph_metrics_comparison.csv
 ```
 
 Полные метрики сохраняются в:
 
 ```text
-/kaggle/working/results/graph_metrics_full.json
+results/graph_metrics_full.json
 ```
 
 ## Пример результатов
