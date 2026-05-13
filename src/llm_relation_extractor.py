@@ -47,6 +47,9 @@ def load_llm(model_name: str = "Qwen/Qwen2.5-3B-Instruct"):
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     if not torch.cuda.is_available():
         model.to("cpu")
+    for sampling_flag in ("temperature", "top_p", "top_k"):
+        if hasattr(model.generation_config, sampling_flag):
+            setattr(model.generation_config, sampling_flag, None)
     model.eval()
     return model, tokenizer
 
@@ -71,6 +74,10 @@ Allowed relations:
 - SAME_TOPIC: same broad topic, but no stronger relation is clear
 - NO_RELATION: no meaningful relation can be inferred
 
+Most pairs were preselected by semantic similarity, so prefer a meaningful
+relation when the papers share methods, tasks, models, datasets, or topic.
+Use NO_RELATION only when the papers are clearly unrelated.
+
 Return only valid JSON with this schema:
 {{
   "relation": "...",
@@ -87,7 +94,12 @@ Paper B:
 
 
 def parse_llm_json_response(response: str) -> dict[str, str | float]:
-    """Parse the LLM JSON response, returning NO_RELATION on failure."""
+    """Parse a local LLM response into the relation schema.
+
+    Smaller local instruct models do not always obey the JSON-only instruction.
+    This parser first tries JSON, then falls back to detecting an allowed
+    relation label in plain text instead of discarding the whole answer.
+    """
     fallback = {
         "relation": "NO_RELATION",
         "confidence": 0.0,
@@ -96,9 +108,13 @@ def parse_llm_json_response(response: str) -> dict[str, str | float]:
     if not isinstance(response, str) or not response.strip():
         return fallback
 
+    cleaned = response.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+
     try:
-        match = re.search(r"\{.*\}", response, flags=re.DOTALL)
-        payload = json.loads(match.group(0) if match else response)
+        match = re.search(r"\{.*?\}", cleaned, flags=re.DOTALL)
+        payload = json.loads(match.group(0) if match else cleaned)
         relation = str(payload.get("relation", "NO_RELATION")).upper()
         if relation not in ALLOWED_RELATIONS:
             relation = "NO_RELATION"
@@ -107,6 +123,15 @@ def parse_llm_json_response(response: str) -> dict[str, str | float]:
         reason = str(payload.get("reason", ""))[:500]
         return {"relation": relation, "confidence": confidence, "reason": reason}
     except Exception:
+        relation_pattern = "|".join(sorted(ALLOWED_RELATIONS, key=len, reverse=True))
+        relation_match = re.search(rf"\b({relation_pattern})\b", cleaned.upper())
+        if relation_match:
+            relation = relation_match.group(1)
+            return {
+                "relation": relation,
+                "confidence": 0.5 if relation != "NO_RELATION" else 0.0,
+                "reason": cleaned[:500],
+            }
         return fallback
 
 
@@ -119,7 +144,13 @@ def classify_relation(
     """Classify a candidate paper pair using a local Transformers model."""
     prompt = build_relation_prompt(paper_a, paper_b)
     try:
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a strict scientific relation classifier. Return one compact JSON object only.",
+            },
+            {"role": "user", "content": prompt},
+        ]
         if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template:
             encoded = tokenizer.apply_chat_template(
                 messages,
@@ -134,18 +165,20 @@ def classify_relation(
         with torch.inference_mode():
             output_ids = llm_model.generate(
                 encoded,
-                max_new_tokens=180,
+                max_new_tokens=320,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
             )
         generated_ids = output_ids[0, encoded.shape[-1] :]
         response = tokenizer.decode(generated_ids, skip_special_tokens=True)
         result = parse_llm_json_response(response or "")
+        result["raw_response"] = (response or "")[:1000]
     except Exception as exc:
         result = {
             "relation": "NO_RELATION",
             "confidence": 0.0,
             "reason": f"Local LLM inference failed: {exc}",
+            "raw_response": "",
         }
 
     result.update(
