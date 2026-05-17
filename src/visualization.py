@@ -20,8 +20,8 @@ def visualize_graph_pyvis(G: nx.Graph, output_path: str) -> None:
 
     for node, attrs in G.nodes(data=True):
         title = str(attrs.get("title", node))
-        label = title[:80] + ("..." if len(title) > 80 else "")
-        net.add_node(node, label=label, title=title)
+        filename = str(attrs.get("filename", node))
+        net.add_node(node, label=filename, title=f"{filename}\n{title}")
 
     for source, target, attrs in G.edges(data=True):
         relation = str(attrs.get("relation", "RELATED"))
