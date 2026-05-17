@@ -45,7 +45,13 @@ def save_graph_gexf(G: nx.Graph, path: str | Path) -> None:
     nx.write_gexf(G, output_path)
 
 
+def save_graph_graphml(G: nx.Graph, path: str | Path) -> None:
+    """Save a graph in GraphML format for portable graph exchange."""
+    output_path = Path(path)
+    ensure_dir(output_path.parent)
+    nx.write_graphml(G, output_path)
+
+
 def is_kaggle_environment() -> bool:
     """Return True when the code is likely running inside a Kaggle notebook."""
     return bool(os.environ.get("KAGGLE_KERNEL_RUN_TYPE"))
-

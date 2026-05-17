@@ -1,112 +1,140 @@
-# Сравнительный анализ методов построения графов научных знаний
+# Scientific Paper Knowledge Graph with Embeddings and Local LLMs
 
-Учебный Python-проект для курсовой работы на тему: **"Построение графов знаний с помощью LLM"**.
+Учебный Python-проект для курсовой работы на тему построения предметно-ориентированного графа знаний по научным статьям.
 
-В проекте вершина графа соответствует научной статье, а ребро описывает связь между двумя статьями. Главный акцент сделан не только на построении графов, но и на сравнении того, как разные способы формирования ребер меняют структуру графа.
+Проект строит граф по PDF-документам: каждая вершина соответствует научной статье, а ребро описывает тематическую или смысловую связь между двумя статьями. В основном pipeline используются только локальные модели: `sentence-transformers` для эмбеддингов и `transformers` для LLM-классификации отношений. OpenAI API и Hugging Face Inference API не используются.
 
-## Цель
-
-Построить несколько вариантов графа научных статей и сравнить их по структурным и семантическим характеристикам: плотности, связности, центральности, PageRank и community structure.
-
-## Архитектура
+## Pipeline
 
 ```text
-project/
-├── data/
-│   ├── papers/
-│   ├── processed/
-│   └── results/
+PDF papers
+-> text extraction
+-> preprocessing
+-> sentence embeddings
+-> candidate pair generation
+-> local LLM relation classification
+-> LLM graph
+-> weighted hybrid graph
+-> graph analysis
+```
+
+## Graphs
+
+### 1. Embedding Similarity Graph
+
+Baseline-граф, который строится по cosine similarity между sentence embeddings статей. Он дает широкое покрытие корпуса и показывает тематическую близость даже тогда, когда тип связи между статьями явно не классифицирован.
+
+### 2. LLM Relation Graph
+
+Интерпретируемый граф, построенный по классификации candidate pairs локальной LLM. Поддерживаемые типы отношений:
+
+- `BASED_ON`
+- `EXTENDS`
+- `COMPARES_WITH`
+- `SIMILAR_TO`
+- `SAME_TOPIC`
+
+Связи `NO_RELATION` и `ERROR` удаляются. Для `SAME_TOPIC` и `SIMILAR_TO` используется порог `confidence >= 0.7`; для `BASED_ON`, `EXTENDS`, `COMPARES_WITH` используется `confidence >= 0.5`. Такой граф обычно более разреженный, но его ребра легче защищать и объяснять.
+
+### 3. Weighted Hybrid Knowledge Graph
+
+Итоговый предметно-ориентированный граф знаний. LLM-рёбра имеют приоритет над embedding-рёбрами. Если LLM уже дала связь между двумя статьями, embedding edge не дублируется. Остальные embedding-рёбра добавляются как `SIMILAR_TO`.
+
+Вес LLM-ребра:
+
+```text
+w_ij = alpha * sim_ij + (1 - alpha) * conf_ij
+```
+
+где `sim_ij` это embedding similarity, а `conf_ij` это confidence локальной LLM.
+
+## Analysis
+
+Для графов считаются:
+
+- density
+- average degree
+- clustering coefficient
+- connected components
+- communities через `networkx.algorithms.community.greedy_modularity_communities`
+- degree centrality
+- betweenness centrality
+- PageRank
+- shortest path explanation между выбранными статьями
+
+Главная интерпретация:
+
+- Embedding Graph дает широкое покрытие и связность.
+- LLM Relation Graph дает типизированные интерпретируемые связи.
+- Weighted Hybrid Graph объединяет оба подхода и является итоговым графом знаний.
+
+## Project Structure
+
+```text
+knowledge_graph/
 ├── src/
 │   ├── pdf_parser.py
 │   ├── preprocessing.py
 │   ├── embeddings.py
-│   ├── citation_extractor.py
 │   ├── llm_relation_extractor.py
 │   ├── graph_builder.py
 │   ├── graph_metrics.py
 │   ├── visualization.py
 │   └── utils.py
+├── data/
+│   ├── papers/
+│   └── results/
 ├── notebooks/
 │   └── main_pipeline.ipynb
 ├── requirements.txt
 └── README.md
 ```
 
-## Методы построения графа
+## Run
 
-1. **Embedding Similarity Graph**
-   Статьи кодируются моделью `sentence-transformers/all-MiniLM-L6-v2`. Ребра создаются между top-k наиболее похожими статьями, если cosine similarity выше заданного порога.
-
-2. **Citation Graph**
-   Из секции References извлекаются библиографические записи. Если название статьи из корпуса встречается в списке литературы другой статьи, создается направленное ребро `PaperA -> PaperB` с отношением `CITES`.
-
-3. **LLM Relation Graph**
-   Локальная HuggingFace LLM, по умолчанию `Qwen/Qwen2.5-1.5B-Instruct`, классифицирует отношения только для candidate pairs из embedding graph. Разрешенные отношения: `SIMILAR_TO`, `BASED_ON`, `EXTENDS`, `COMPARES_WITH`, `SAME_TOPIC`, `NO_RELATION`.
-
-4. **Hybrid Graph**
-   Объединяет similarity edges, citation edges и LLM edges в `networkx.MultiDiGraph`. Это позволяет сравнить комбинированный подход с каждым отдельным источником связей.
-
-## Запуск 
-
-1. Подберите интересующие Вас статьи.
-2. Откройте `notebooks/main_pipeline.ipynb`.
-3. При необходимости выполните ячейку установки зависимостей.
-4. Проверьте конфигурацию:
+1. Put PDF papers into `data/papers/`.
+2. Open `notebooks/main_pipeline.ipynb` in Google Colab or locally.
+3. Install dependencies if needed.
+4. Configure:
 
 ```python
-PAPERS_PATH = "data/papers"
-RESULTS_PATH = "data/results"
+PAPERS_PATH = PROJECT_ROOT / "data" / "papers"
+RESULTS_PATH = PROJECT_ROOT / "data" / "results"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 LLM_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 SIMILARITY_THRESHOLD = 0.55
 TOP_K = 5
-USE_LLM = False
+USE_LLM = True
 ```
 
-По умолчанию `USE_LLM=False`, поэтому проект строит embedding, citation и hybrid graph без загрузки тяжелой LLM. Чтобы включить LLM-классификацию, установите `USE_LLM=True`.
+If `USE_LLM=False`, the project skips local LLM inference and builds the embedding graph plus `hybrid_graph = embedding_graph.copy()`.
 
-## Метрики
+## Outputs
 
-Для каждого графа считаются:
-
-- number of nodes
-- number of edges
-- density
-- number of connected components для неориентированной версии
-- average degree
-- average clustering для неориентированной версии
-- degree centrality
-- PageRank для направленных графов
-- top-10 nodes by degree
-- top-10 nodes by PageRank
-- community detection через `networkx.greedy_modularity_communities`
-
-Сравнительная таблица сохраняется в:
+After running the notebook, the main results are saved to `data/results/`:
 
 ```text
-results/graph_metrics_comparison.csv
+papers.csv
+candidate_pairs.csv
+llm_relations_raw.csv
+llm_relations_filtered.csv
+graph_metrics.csv
+communities.csv
+community_summary.csv
+centrality.csv
+path_example.csv
+hybrid_nodes.csv
+hybrid_edges.csv
+embedding_graph.graphml
+llm_graph.graphml
+hybrid_graph.graphml
 ```
 
-Полные метрики сохраняются в:
+Optional HTML visualizations and metric plots are also saved when `pyvis` and `matplotlib` are available.
 
-```text
-results/graph_metrics_full.json
-```
+## Notes
 
-## Пример результатов
-
-Ожидаемая интерпретация:
-
-- **Similarity graph** часто получается более плотным, потому что семантически похожие статьи находятся даже без явных ссылок.
-- **Citation graph** обычно более разреженный и направленный, но отражает реальные библиографические зависимости.
-- **LLM graph** добавляет тип связи и объяснение, но требует больше вычислительных ресурсов.
-- **Hybrid graph** объединяет разные источники связей и обычно дает более информативную структуру для анализа центральных статей и сообществ.
-
-## Ограничения
-
-- Извлечение title, abstract и references основано на простых эвристиках и может ошибаться на плохо распознанных PDF.
-- Citation matching ищет совпадения названий статей в references, поэтому не покрывает сокращенные, неполные или сильно переформатированные ссылки.
-- LLM запускается только на candidate pairs, иначе вычислительная стоимость быстро становится слишком высокой.
-- Качество LLM-классификации зависит от выбранной модели, GPU-памяти и качества извлеченного текста.
-- Проект не использует OpenAI API, платные API или внешние закрытые сервисы.
-
+- The LLM is loaded locally through `transformers`.
+- The project does not call paid APIs.
+- The project does not use Hugging Face Inference API.
+- PDF title and abstract extraction use heuristic parsing, so `TITLE_MAP` in the notebook can be used to fix titles before graph construction.
